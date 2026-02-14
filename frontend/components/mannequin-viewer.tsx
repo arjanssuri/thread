@@ -31,6 +31,18 @@ function MannequinModel() {
         "#c4956a"  // nails
       );
 
+      // Replace head texture with smooth plain material to remove uncanny face
+      const smoothSkin = new THREE.MeshStandardMaterial({
+        color: "#d4a574",
+        roughness: 0.6,
+        metalness: 0.05,
+      });
+      man.head.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh && child.name === "HeadShape") {
+          child.material = smoothSkin;
+        }
+      });
+
       // Set a natural standing pose
       man.torso.bend = 2;
       man.head.nod = -5;
