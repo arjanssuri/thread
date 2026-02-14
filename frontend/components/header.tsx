@@ -67,12 +67,6 @@ export function Header() {
         {/* Desktop Navigation - Centered */}
         <nav className="hidden items-center gap-10 md:flex absolute left-1/2 -translate-x-1/2">
           <Link
-            href="/search"
-            className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
-          >
-            Search
-          </Link>
-          <Link
             href="#products"
             className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
           >
