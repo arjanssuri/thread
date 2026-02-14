@@ -81,10 +81,10 @@ Phased plan to ship **thread** from zero to full feature set. Complete phases in
 
 ### Phase 1 — Foundation
 
-- [ ] **Scaffold** — Next.js (App Router) + TypeScript + pnpm. Add Tailwind CSS. Create `src/` layout per planned directory structure (empty folders + root layout).
-- [ ] **Supabase** — Create project, enable Auth and Database. Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Implement `lib/supabase/` (server client, browser client, middleware for session refresh).
-- [ ] **Auth** — `app/(auth)/login` and `app/(auth)/signup` with Supabase Auth. Protected layout or middleware for authenticated routes. Basic nav (home, search, login/logout).
-- [ ] **Types** — Run `supabase gen types typescript`, save to `types/supabase.ts`. Add shared types in `types/` for product, cluster, etc. as needed.
+- [x] **Scaffold** — Next.js (App Router) + TypeScript + pnpm. Add Tailwind CSS. Create `src/` layout per planned directory structure (empty folders + root layout).
+- [x] **Supabase** — Create project, enable Auth and Database. Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Implement `lib/supabase/` (server client, browser client, middleware for session refresh).
+- [x] **Auth** — `app/(auth)/login` and `app/(auth)/signup` with Supabase Auth. Protected layout or middleware for authenticated routes. Basic nav (home, search, login/logout).
+- [x] **Types** — Run `supabase gen types typescript`, save to `types/supabase.ts`. Add shared types in `types/` for product, cluster, etc. as needed.
 
 ### Phase 2 — Data & Semantic Search
 
