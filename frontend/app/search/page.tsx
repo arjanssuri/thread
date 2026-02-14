@@ -60,6 +60,20 @@ export default function SearchPage() {
     fetchGraph("");
   }, [fetchGraph]);
 
+  // Listen for header magnifying glass "open-search" event
+  useEffect(() => {
+    const handler = () => {
+      if (searchActive) {
+        inputRef.current?.focus();
+      } else {
+        setSearchActive(true);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener("open-search", handler);
+    return () => window.removeEventListener("open-search", handler);
+  }, [searchActive]);
+
   // Debounced search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { Menu, X, Settings2, Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -88,13 +89,19 @@ export function Header() {
 
         {/* CTA + Auth - Right side */}
         <div className="hidden items-center gap-4 md:flex">
-          <Link
-            href="/collections"
+          <button
+            onClick={() => {
+              if (pathname === "/collections" || pathname === "/search") {
+                window.dispatchEvent(new CustomEvent("open-search"));
+              } else {
+                router.push("/collections");
+              }
+            }}
             className="p-2.5 rounded-full text-white/80 hover:text-white transition-colors drop-shadow-sm"
-            aria-label="Browse collections"
+            aria-label="Search"
           >
             <Search size={20} />
-          </Link>
+          </button>
           {user && (
             <Link
               href="/preferences"

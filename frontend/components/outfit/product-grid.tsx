@@ -26,7 +26,7 @@ interface ProductGridProps {
 
 export function ProductGrid({ onSelect, selectedId }: ProductGridProps) {
   const [products, setProducts] = useState<Product[]>([]);
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState("pant");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [columns, setColumns] = useState<3 | 4 | 5>(4);
@@ -37,6 +37,16 @@ export function ProductGrid({ onSelect, selectedId }: ProductGridProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  // Listen for header magnifying glass "open-search" event
+  useEffect(() => {
+    const handler = () => {
+      setSearchOpen(true);
+      setTimeout(() => searchInputRef.current?.focus(), 50);
+    };
+    window.addEventListener("open-search", handler);
+    return () => window.removeEventListener("open-search", handler);
+  }, []);
 
   // Debounce search query
   useEffect(() => {
