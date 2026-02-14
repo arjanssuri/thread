@@ -30,11 +30,8 @@ pnpm type-check   # Run TypeScript compiler check (tsc --noEmit)
 ### Core Features
 
 1. **Semantic Search** — Product queries are embedded via OpenAI and matched against pgvector embeddings in Supabase. Results are clustered by similarity.
-
 2. **3D Graph Visualization** — Search results render as a force-directed graph using React Three Fiber. Clusters group related products; nodes are interactive and filterable.
-
 3. **Outfit Visualization** — Selected items are composed into an outfit preview using Three.js. Sora generates a try-on image/video of the user wearing the outfit.
-
 4. **AI Shopping Agent** — Users provide preferences (style, budget, sizing) and an autonomous agent browses, filters, and recommends products on their behalf.
 
 ### Planned Directory Structure
@@ -81,10 +78,10 @@ Phased plan to ship **thread** from zero to full feature set. Complete phases in
 
 ### Phase 1 — Foundation
 
-- [x] **Scaffold** — Next.js (App Router) + TypeScript + pnpm. Add Tailwind CSS. Create `src/` layout per planned directory structure (empty folders + root layout).
-- [x] **Supabase** — Create project, enable Auth and Database. Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Implement `lib/supabase/` (server client, browser client, middleware for session refresh).
-- [x] **Auth** — `app/(auth)/login` and `app/(auth)/signup` with Supabase Auth. Protected layout or middleware for authenticated routes. Basic nav (home, search, login/logout).
-- [x] **Types** — Run `supabase gen types typescript`, save to `types/supabase.ts`. Add shared types in `types/` for product, cluster, etc. as needed.
+- [X] **Scaffold** — Next.js (App Router) + TypeScript + pnpm. Add Tailwind CSS. Create `src/` layout per planned directory structure (empty folders + root layout).
+- [X] **Supabase** — Create project, enable Auth and Database. Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. Implement `lib/supabase/` (server client, browser client, middleware for session refresh).
+- [X] **Auth** — `app/(auth)/login` and `app/(auth)/signup` with Supabase Auth. Protected layout or middleware for authenticated routes. Basic nav (home, search, login/logout).
+- [X] **Types** — Run `supabase gen types typescript`, save to `types/supabase.ts`. Add shared types in `types/` for product, cluster, etc. as needed.
 
 ### Phase 2 — Data & Semantic Search
 
