@@ -30,7 +30,7 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Required: triggers token refresh and keeps session in sync
-  await supabase.auth.getClaims();
+  await supabase.auth.getUser();
 
   return supabaseResponse;
 }

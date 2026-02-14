@@ -40,6 +40,59 @@ function MannequinModel() {
       man.head.traverse((child: THREE.Object3D) => {
         if (child instanceof THREE.Mesh && child.name === "HeadShape") {
           child.material = smoothSkin;
+
+          // Add hair on top of the head
+          const bbox = new THREE.Box3().setFromObject(child);
+          const headSize = new THREE.Vector3();
+          bbox.getSize(headSize);
+          const headCenter = new THREE.Vector3();
+          bbox.getCenter(headCenter);
+
+          const hairMat = new THREE.MeshStandardMaterial({
+            color: "#1a1209",
+            roughness: 0.9,
+            metalness: 0.0,
+          });
+
+          // Main hair cap - top portion of head
+          const hairGeo = new THREE.SphereGeometry(
+            headSize.x * 0.55, // radius slightly larger than head
+            24, 16,
+            0, Math.PI * 2, // full circle
+            0, Math.PI * 0.55  // top ~55% of sphere
+          );
+          // Add slight vertex noise for natural texture
+          const pos = hairGeo.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = pos.getZ(i);
+            const noise = 1 + (Math.sin(x * 20) * Math.cos(z * 20) * 0.03);
+            pos.setXYZ(i, x * noise, y * noise, z * noise);
+          }
+          hairGeo.computeVertexNormals();
+
+          const hairMesh = new THREE.Mesh(hairGeo, hairMat);
+          // Position at top of head
+          child.getWorldPosition(headCenter);
+          child.parent?.worldToLocal(headCenter);
+          hairMesh.position.copy(headCenter);
+          hairMesh.position.y += headSize.y * 0.07;
+
+          // Side/back volume
+          const sideGeo = new THREE.SphereGeometry(
+            headSize.x * 0.56, 24, 12,
+            Math.PI * 0.6, Math.PI * 1.5, // back and sides
+            Math.PI * 0.25, Math.PI * 0.45
+          );
+          const sideMesh = new THREE.Mesh(sideGeo, hairMat);
+          sideMesh.position.copy(hairMesh.position);
+          sideMesh.position.y -= headSize.y * 0.05;
+
+          if (child.parent) {
+            child.parent.add(hairMesh);
+            child.parent.add(sideMesh);
+          }
         }
       });
 
