@@ -45,7 +45,7 @@ export function Header() {
 
   return (
     <header
-      className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-4xl transition-all duration-300 ${isScrolled ? "bg-background/80 backdrop-blur-md rounded-full" : "bg-transparent"}`}
+      className={`fixed top-5 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-4xl transition-all duration-300 ${isScrolled ? "bg-black/70 backdrop-blur-md rounded-full" : "bg-transparent"}`}
       style={{
         boxShadow: isScrolled
           ? "rgba(14, 63, 126, 0.04) 0px 0px 0px 1px, rgba(42, 51, 69, 0.04) 0px 1px 1px -0.5px, rgba(42, 51, 70, 0.04) 0px 3px 3px -1.5px, rgba(42, 51, 70, 0.04) 0px 6px 6px -3px, rgba(14, 63, 126, 0.04) 0px 12px 12px -6px, rgba(14, 63, 126, 0.04) 0px 24px 24px -12px"
@@ -56,7 +56,7 @@ export function Header() {
         {/* Logo */}
         <Link
           href="/"
-          className="text-2xl font-semibold tracking-tight transition-colors duration-300 text-foreground lowercase"
+          className="text-3xl font-bold tracking-tight transition-colors duration-300 text-white lowercase drop-shadow-md"
         >
           thread
         </Link>
@@ -65,25 +65,25 @@ export function Header() {
         <nav className="hidden items-center gap-10 md:flex">
           <Link
             href="/search"
-            className="text-base transition-colors text-muted-foreground hover:text-foreground"
+            className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
           >
             Search
           </Link>
           <Link
             href="#products"
-            className="text-base transition-colors text-muted-foreground hover:text-foreground"
+            className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
           >
             Collections
           </Link>
           <Link
             href="/outfit"
-            className="text-base transition-colors text-muted-foreground hover:text-foreground"
+            className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
           >
             Try On
           </Link>
           <Link
             href="/agent"
-            className="text-base transition-colors text-muted-foreground hover:text-foreground"
+            className="text-lg font-semibold transition-colors text-white/80 hover:text-white drop-shadow-sm"
           >
             Agent
           </Link>
@@ -93,7 +93,7 @@ export function Header() {
         <div className="hidden items-center gap-4 md:flex">
           <Link
             href="/search"
-            className="p-2.5 rounded-full text-muted-foreground hover:text-foreground transition-colors"
+            className="p-2.5 rounded-full text-white/80 hover:text-white transition-colors drop-shadow-sm"
             aria-label="Search"
           >
             <Search size={20} />
@@ -105,7 +105,7 @@ export function Header() {
           ) : (
             <Link
               href="/login"
-              className="px-6 py-2.5 text-base font-medium transition-all rounded-full bg-foreground text-background hover:opacity-80"
+              className="px-6 py-2.5 text-base font-semibold transition-all rounded-full bg-white text-black hover:bg-white/90"
             >
               Get Started
             </Link>
@@ -116,7 +116,7 @@ export function Header() {
         <button
           type="button"
           onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="transition-colors md:hidden text-foreground"
+          className="transition-colors md:hidden text-white drop-shadow-sm"
           aria-label="Toggle menu"
         >
           {isMenuOpen ? <X size={28} /> : <Menu size={28} />}

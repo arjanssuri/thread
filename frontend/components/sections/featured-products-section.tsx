@@ -8,7 +8,7 @@ const features = [
     span: "col-span-2 row-span-2", // Large
   },
   {
-    image: "https://images.unsplash.com/photo-1434389677669-e08b4cda3a98?w=400&h=400&fit=crop",
+    image: "https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=400&fit=crop",
     span: "col-span-1 row-span-1", // Small
   },
   {
@@ -24,7 +24,7 @@ const features = [
     span: "col-span-1 row-span-1", // Small
   },
   {
-    image: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=800&h=400&fit=crop",
+    image: "https://images.unsplash.com/photo-1445205170230-053b83016050?w=800&h=400&fit=crop",
     span: "col-span-2 row-span-1", // Wide
   },
   {

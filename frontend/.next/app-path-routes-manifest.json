@@ -1,5 +1,11 @@
 {
+  "/(auth)/login/page": "/login",
+  "/(auth)/signup/page": "/signup",
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
-  "/page": "/"
+  "/agent/page": "/agent",
+  "/auth/callback/route": "/auth/callback",
+  "/outfit/page": "/outfit",
+  "/page": "/",
+  "/search/page": "/search"
 }

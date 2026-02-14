@@ -56,22 +56,19 @@ export function HeroSection() {
     };
   }, []);
 
-  // Text fades out first (0 to 0.2)
-  const textOpacity = Math.max(0, 1 - (scrollProgress / 0.2));
+  // Text fades out (0 to 0.3)
+  const textOpacity = Math.max(0, 1 - (scrollProgress / 0.3));
 
   // Image transforms start after text fades (0.2 to 1)
   const imageProgress = Math.max(0, Math.min(1, (scrollProgress - 0.2) / 0.8));
 
   // Smooth interpolations
   const centerWidth = 100 - (imageProgress * 80);
-  const centerHeight = 100;
   const sideWidth = imageProgress * 40;
   const sideOpacity = imageProgress;
   const sideTranslateLeft = -100 + (imageProgress * 100);
   const sideTranslateRight = 100 - (imageProgress * 100);
-  const borderRadius = 0;
   const gap = imageProgress * 8;
-
   const sideTranslateY = -(imageProgress * 15);
 
   return (
@@ -98,12 +95,9 @@ export function HeroSection() {
               <div
                 key={idx}
                 className="relative flex-1 overflow-hidden will-change-transform"
-                style={{
-                  borderRadius: `${borderRadius}px`,
-                }}
               >
                 <Image
-                  src={img.src || "/placeholder.svg"}
+                  src={img.src}
                   alt={img.alt}
                   fill
                   sizes="(max-width: 768px) 50vw, 20vw"
@@ -119,15 +113,26 @@ export function HeroSection() {
             style={{
               width: `${centerWidth}%`,
               flex: "0 0 auto",
-              borderRadius: `${borderRadius}px`,
             }}
           >
-            {/* Text Behind - Fades out first */}
+            {/* Background image */}
+            <Image
+              src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&h=1200&fit=crop"
+              alt="Fashion store with curated collections"
+              fill
+              className="object-cover"
+              priority
+            />
+
+            {/* Dark overlay for text contrast */}
+            <div className="absolute inset-0 bg-black/30" />
+
+            {/* Big "thread" text - on TOP of image, fades with scroll */}
             <div
-              className="absolute inset-0 z-0 flex items-center justify-center"
-              style={{ opacity: textOpacity, transform: 'translateY(-200px)' }}
+              className="absolute inset-0 z-20 flex items-center justify-center"
+              style={{ opacity: textOpacity }}
             >
-              <h1 className="whitespace-nowrap text-[30vw] font-bold leading-[0.8] tracking-tighter text-black lowercase">
+              <h1 className="whitespace-nowrap text-[28vw] font-black leading-[0.85] tracking-tighter text-white lowercase">
                 {word.split("").map((letter, index) => (
                   <span
                     key={index}
@@ -136,6 +141,7 @@ export function HeroSection() {
                       animationDelay: `${index * 0.08}s`,
                       transition: 'all 1.5s',
                       transitionTimingFunction: 'cubic-bezier(0.86, 0, 0.07, 1)',
+                      textShadow: '0 4px 30px rgba(0,0,0,0.3)',
                     }}
                   >
                     {letter}
@@ -143,14 +149,6 @@ export function HeroSection() {
                 ))}
               </h1>
             </div>
-
-            <Image
-              src="https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1600&h=1200&fit=crop"
-              alt="Fashion store with curated collections"
-              fill
-              className="absolute inset-0 z-10 object-cover"
-              priority
-            />
           </div>
 
           {/* Right Column */}
@@ -167,12 +165,9 @@ export function HeroSection() {
               <div
                 key={idx}
                 className="relative flex-1 overflow-hidden will-change-transform"
-                style={{
-                  borderRadius: `${borderRadius}px`,
-                }}
               >
                 <Image
-                  src={img.src || "/placeholder.svg"}
+                  src={img.src}
                   alt={img.alt}
                   fill
                   sizes="(max-width: 768px) 50vw, 20vw"
@@ -190,7 +185,7 @@ export function HeroSection() {
         className="pointer-events-none fixed bottom-0 left-0 right-0 z-10 px-6 pb-12 md:px-12 md:pb-16 lg:px-20 lg:pb-20"
         style={{ opacity: textOpacity }}
       >
-        <p className="mx-auto max-w-2xl text-center text-2xl leading-relaxed text-white md:text-3xl lg:text-[2.5rem] lg:leading-snug">
+        <p className="mx-auto max-w-2xl text-center text-2xl leading-relaxed text-white md:text-3xl lg:text-[2.5rem] lg:leading-snug drop-shadow-lg">
           Search. Discover.
           <br />
           Wear it your way.

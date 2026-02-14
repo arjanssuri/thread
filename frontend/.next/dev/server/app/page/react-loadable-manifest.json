@@ -1,1 +1,15 @@
-{}
+{
+  "[project]/components/mannequin-viewer.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/components/mannequin-viewer.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/b8468_three_build_three_core_d107bb6c.js",
+      "static/chunks/b8468_three_build_three_module_aa6b3f08.js",
+      "static/chunks/b8468_three_build_three_module_6fc3d3bb.js",
+      "static/chunks/fc61c_@react-three_fiber_dist_9e66d544._.js",
+      "static/chunks/23c96_three-stdlib_fd0d988a._.js",
+      "static/chunks/node_modules__pnpm_84539dbf._.js",
+      "static/chunks/components_mannequin-viewer_tsx_e8c58cfe._.js",
+      "static/chunks/components_mannequin-viewer_tsx_9dfc3988._.js"
+    ]
+  }
+}
