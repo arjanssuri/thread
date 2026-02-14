@@ -1,8 +1,28 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+async function uploadToStorage(videoBuffer: Buffer): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const filename = `${crypto.randomUUID()}.mp4`;
+    const { error } = await supabase.storage
+      .from("tryon-videos")
+      .upload(filename, videoBuffer, { contentType: "video/mp4" });
+    if (error) {
+      console.error("Storage upload error:", error.message);
+      return null;
+    }
+    const { data } = supabase.storage.from("tryon-videos").getPublicUrl(filename);
+    return data.publicUrl;
+  } catch (err) {
+    console.error("Storage upload failed:", err);
+    return null;
+  }
+}
 
 /**
  * POST — Start video generation, returns operation name for polling.
@@ -119,9 +139,11 @@ export async function GET(request: NextRequest) {
         const resp = downloadResult as Response;
         if (typeof resp.arrayBuffer === "function") {
           const buffer = Buffer.from(await resp.arrayBuffer());
+          const storageUrl = await uploadToStorage(buffer);
           return NextResponse.json({
             done: true,
             videoUrl: `data:video/mp4;base64,${buffer.toString("base64")}`,
+            storageUrl,
           });
         }
       } catch (dlErr) {
@@ -135,9 +157,11 @@ export async function GET(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await videoRes.arrayBuffer());
+    const storageUrl = await uploadToStorage(buffer);
     return NextResponse.json({
       done: true,
       videoUrl: `data:video/mp4;base64,${buffer.toString("base64")}`,
+      storageUrl,
     });
   } catch (err: unknown) {
     const message =
