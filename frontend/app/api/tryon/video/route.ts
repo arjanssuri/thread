@@ -132,45 +132,55 @@ export async function POST(request: NextRequest) {
       productEmphasis = `Draw attention to the ${garmentType}: the fit, the neckline, sleeves, and overall drape.`;
     }
 
+    // Strategy: use person's photo as the `image` param (image-to-video anchor)
+    // so Veo starts from their face/body. Product image goes as a reference
+    // for the garment. Text prompt describes dressing them in the product.
+    const hasPersonImage = !!personImageBase64;
+    const hasProductImage = !!productImageBase64;
+
     let referenceNote = "";
-    if (personImageBase64 && productImageBase64) {
-      referenceNote = ` TWO reference images are provided. Reference image 1 is a PHOTO OF THE PERSON — use this person's exact face, hair, skin tone, and body as the model in the video. Do NOT use the person shown in reference image 2. Reference image 2 is a PRODUCT PHOTO of the clothing item — use ONLY the garment (its color, fabric, pattern, and design) from this image. IGNORE the model/mannequin wearing it in that photo. The video must show the person from reference image 1 wearing the garment from reference image 2.`;
-    } else if (personImageBase64) {
-      referenceNote = ` A reference image of the person is provided — the video must depict this exact person's face, body, hair, and skin tone.`;
-    } else if (productImageBase64) {
-      referenceNote = ` A reference image of the garment is provided — match its exact color, fabric, pattern, and details. IGNORE the person/mannequin in the product photo.`;
+    if (hasPersonImage && hasProductImage) {
+      referenceNote = ` The input image is a photo of the person — this is who must appear in the video. Keep their exact face, hair, and body. The reference image shows the garment they should be wearing — dress them in this exact clothing item. Ignore the person/mannequin in the garment photo, only use the clothing.`;
+    } else if (hasPersonImage) {
+      referenceNote = ` The input image is a photo of the person — the video must depict this exact person's face, body, hair, and skin tone.`;
+    } else if (hasProductImage) {
+      referenceNote = ` The reference image shows the garment — match its exact color, fabric, pattern, and details. Ignore the person/mannequin in the photo.`;
     }
 
-    const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}.${referenceNote} IMPORTANT: The entire person must be visible from head to shoes/feet at all times — never crop any body part.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed wide-angle camera at waist height, centered. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
+    const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}.${referenceNote} CRITICAL FRAMING: Show the FULL BODY from head to feet at all times — wide shot, never crop or zoom in. Do NOT match the framing of the input image.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed wide-angle camera at waist height, centered, far enough back to show the entire body. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
 
     console.log("[Veo] Generated prompt:", prompt);
-    console.log("[Veo] Reference images — person:", !!personImageBase64, "product:", !!productImageBase64);
+    console.log("[Veo] Person image:", hasPersonImage, "Product image:", hasProductImage);
 
-    // Build reference images array (person + product, up to 3 ASSET refs supported)
+    // Person photo → `image` param (image-to-video: anchors on their appearance)
+    // Product photo → `referenceImages` ASSET (garment reference)
     const referenceImages: { image: { imageBytes: string; mimeType: string }; referenceType: "ASSET" }[] = [];
-    if (personImageBase64) {
+    if (hasProductImage) {
       referenceImages.push({
-        image: { imageBytes: personImageBase64, mimeType: "image/jpeg" },
-        referenceType: "ASSET",
-      });
-    }
-    if (productImageBase64) {
-      referenceImages.push({
-        image: { imageBytes: productImageBase64, mimeType: "image/jpeg" },
+        image: { imageBytes: productImageBase64!, mimeType: "image/jpeg" },
         referenceType: "ASSET",
       });
     }
 
-    // Use full veo-3.1 when we have reference images (fast preview doesn't support them)
-    const model = referenceImages.length > 0
+    const useFullModel = hasPersonImage || referenceImages.length > 0;
+    const model = useFullModel
       ? "veo-3.1-generate-preview"
       : "veo-3.1-fast-generate-preview";
 
-    console.log(`[Veo] Using model: ${model}, referenceImages: ${referenceImages.length}`);
+    console.log(`[Veo] Using model: ${model}, image-to-video: ${hasPersonImage}, referenceImages: ${referenceImages.length}`);
 
     const operation = await ai.models.generateVideos({
       model,
       prompt,
+      // Person photo as the image-to-video input (Veo anchors on this person)
+      ...(hasPersonImage
+        ? {
+            image: {
+              imageBytes: personImageBase64!,
+              mimeType: "image/jpeg",
+            },
+          }
+        : {}),
       config: {
         aspectRatio: "9:16",
         personGeneration: "allow_adult",
