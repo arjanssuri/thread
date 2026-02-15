@@ -1,8 +1,6 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, ContactShadows } from "@react-three/drei";
-import { useRef, useEffect, useState, Suspense, useMemo } from "react";
+import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import type { Product } from "@/types/product";
 
@@ -56,38 +54,111 @@ function applyMaterialToPart(part: THREE.Object3D, material: THREE.Material) {
   });
 }
 
-// ── MannequinModel (mannequin-js) ────────────────────────────────────────────
+// ── Default materials ────────────────────────────────────────────────────────
 
-interface MannequinModelProps {
+const DEFAULT_SHIRT = new THREE.MeshPhongMaterial({ color: "#1a1a1a", shininess: 10 });
+const DEFAULT_PANTS = new THREE.MeshPhongMaterial({ color: "#2d2d3d", shininess: 10 });
+const DEFAULT_SHOES = new THREE.MeshPhongMaterial({ color: "#111111", shininess: 20 });
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resetMannequin(man: any) {
+  applyMaterialToPart(man.torso, DEFAULT_SHIRT);
+  if (man.l_arm) applyMaterialToPart(man.l_arm, DEFAULT_SHIRT);
+  if (man.r_arm) applyMaterialToPart(man.r_arm, DEFAULT_SHIRT);
+  if (man.l_elbow) applyMaterialToPart(man.l_elbow, DEFAULT_SHIRT);
+  if (man.r_elbow) applyMaterialToPart(man.r_elbow, DEFAULT_SHIRT);
+  applyMaterialToPart(man.pelvis, DEFAULT_PANTS);
+  if (man.l_leg) applyMaterialToPart(man.l_leg, DEFAULT_PANTS);
+  if (man.r_leg) applyMaterialToPart(man.r_leg, DEFAULT_PANTS);
+  if (man.l_knee) applyMaterialToPart(man.l_knee, DEFAULT_PANTS);
+  if (man.r_knee) applyMaterialToPart(man.r_knee, DEFAULT_PANTS);
+  if (man.l_ankle) applyMaterialToPart(man.l_ankle, DEFAULT_SHOES);
+  if (man.r_ankle) applyMaterialToPart(man.r_ankle, DEFAULT_SHOES);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function applyClothing(man: any, product: Product | null | undefined) {
+  resetMannequin(man);
+
+  if (!product?.image_url || !product.category) return;
+
+  const zone = classifyZone(product.category);
+  if (zone === "none") return;
+
+  const color = await extractDominantColor(product.image_url);
+  const clothingMat = new THREE.MeshPhongMaterial({ color, shininess: 15 });
+
+  if (zone === "top" || zone === "full") {
+    applyMaterialToPart(man.torso, clothingMat);
+    if (man.l_arm) applyMaterialToPart(man.l_arm, clothingMat);
+    if (man.r_arm) applyMaterialToPart(man.r_arm, clothingMat);
+    if (man.l_elbow) applyMaterialToPart(man.l_elbow, clothingMat);
+    if (man.r_elbow) applyMaterialToPart(man.r_elbow, clothingMat);
+  }
+
+  if (zone === "bottom" || zone === "full") {
+    applyMaterialToPart(man.pelvis, clothingMat);
+    if (man.l_leg) applyMaterialToPart(man.l_leg, clothingMat);
+    if (man.r_leg) applyMaterialToPart(man.r_leg, clothingMat);
+    if (man.l_knee) applyMaterialToPart(man.l_knee, clothingMat);
+    if (man.r_knee) applyMaterialToPart(man.r_knee, clothingMat);
+  }
+
+  if (zone === "shoes") {
+    const shoeMat = new THREE.MeshPhongMaterial({ color, shininess: 30 });
+    if (man.l_ankle) applyMaterialToPart(man.l_ankle, shoeMat);
+    if (man.r_ankle) applyMaterialToPart(man.r_ankle, shoeMat);
+  }
+}
+
+// ── MannequinViewer ──────────────────────────────────────────────────────────
+
+interface MannequinViewerProps {
   product?: Product | null;
 }
 
-function MannequinModel({ product }: MannequinModelProps) {
-  const groupRef = useRef<THREE.Group>(null);
+export function MannequinViewer({ product }: MannequinViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mannequinRef = useRef<any>(null);
-  const [mannequin, setMannequin] = useState<THREE.Object3D | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const stageRef = useRef<any>(null);
+  const initRef = useRef(false);
+  // Track when mannequin is ready so the clothing effect can fire
+  const [ready, setReady] = useState(false);
 
-  const baseMaterials = useMemo(
-    () => ({
-      skin: new THREE.MeshStandardMaterial({ color: "#d4a574", roughness: 0.6, metalness: 0.05 }),
-      shirt: new THREE.MeshStandardMaterial({ color: "#1a1a1a", roughness: 0.7, metalness: 0 }),
-      pants: new THREE.MeshStandardMaterial({ color: "#2d2d3d", roughness: 0.7, metalness: 0 }),
-      shoes: new THREE.MeshStandardMaterial({ color: "#111111", roughness: 0.6, metalness: 0.05 }),
-    }),
-    []
-  );
-
-  // Create mannequin once
+  // Initialize mannequin-js once
   useEffect(() => {
-    let cancelled = false;
+    if (initRef.current) return;
+    initRef.current = true;
+    const container = containerRef.current;
+    if (!container) return;
 
-    // mannequin-js auto-creates a renderer/scene/dom element on import.
-    // We need to capture and clean those up after extracting the model.
     import("mannequin-js/src/mannequin.js")
       .then((mod) => {
-        if (cancelled) return;
         const { Male, getStage } = mod;
+        const stage = getStage();
+        stageRef.current = stage;
+
+        if (!stage?.renderer) return;
+
+        // Steal the canvas from document.body into our container
+        const canvas = stage.renderer.domElement;
+        canvas.style.cssText = "width:100%; height:100%; position:absolute; top:0; left:0; border-radius: inherit;";
+        container.appendChild(canvas);
+
+        // Transparent background
+        stage.scene.background = null;
+        stage.renderer.setClearColor(0x000000, 0);
+
+        // Resize to container
+        const rect = container.getBoundingClientRect();
+        stage.renderer.setSize(rect.width, rect.height);
+        stage.camera.aspect = rect.width / rect.height;
+        stage.camera.position.set(0, 0, 4.5);
+        stage.camera.updateProjectionMatrix();
+
+        // Create mannequin
         const man = new Male();
 
         // Natural pose
@@ -100,146 +171,44 @@ function MannequinModel({ product }: MannequinModelProps) {
         man.l_elbow.bend = 15;
         man.r_elbow.bend = 15;
 
-        // Detach from mannequin-js's internal scene
-        man.removeFromParent();
-
-        // Clean up mannequin-js's auto-created renderer + DOM elements
-        try {
-          const stage = getStage();
-          if (stage?.renderer) {
-            stage.renderer.setAnimationLoop(null);
-            if (stage.renderer.domElement?.parentNode) {
-              stage.renderer.domElement.parentNode.removeChild(stage.renderer.domElement);
-            }
-            stage.renderer.dispose();
-          }
-        } catch {
-          // ignore cleanup errors
-        }
-
-        // Remove any stray elements mannequin-js appended
-        document.querySelectorAll('canvas').forEach((c) => {
-          if (c.style.position === 'fixed' && !c.closest('.mannequin-container')) {
-            c.remove();
-          }
-        });
-
         mannequinRef.current = man;
-        setMannequin(man);
+        setReady(true); // triggers the clothing effect below
       })
       .catch((err) => {
         console.error("[MannequinViewer] Failed to load mannequin-js:", err);
       });
 
-    return () => { cancelled = true; };
+    // Keep renderer sized to container
+    const resizeObserver = new ResizeObserver((entries) => {
+      const stage = stageRef.current;
+      if (!stage?.renderer) return;
+      const { width, height } = entries[0].contentRect;
+      if (width > 0 && height > 0) {
+        stage.renderer.setSize(width, height);
+        stage.camera.aspect = width / height;
+        stage.camera.updateProjectionMatrix();
+      }
+    });
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, []);
 
-  // Apply product clothing colors
+  // Apply product clothing — fires when product changes OR when mannequin becomes ready
   useEffect(() => {
+    if (!ready) return;
     const man = mannequinRef.current;
     if (!man) return;
-
-    // Reset to defaults
-    applyMaterialToPart(man.torso, baseMaterials.shirt);
-    if (man.l_arm) applyMaterialToPart(man.l_arm, baseMaterials.shirt);
-    if (man.r_arm) applyMaterialToPart(man.r_arm, baseMaterials.shirt);
-    applyMaterialToPart(man.pelvis, baseMaterials.pants);
-    if (man.l_leg) applyMaterialToPart(man.l_leg, baseMaterials.pants);
-    if (man.r_leg) applyMaterialToPart(man.r_leg, baseMaterials.pants);
-    if (man.l_ankle) applyMaterialToPart(man.l_ankle, baseMaterials.shoes);
-    if (man.r_ankle) applyMaterialToPart(man.r_ankle, baseMaterials.shoes);
-
-    if (!product?.image_url || !product.category) return;
-
-    const zone = classifyZone(product.category);
-    if (zone === "none") return;
-
-    (async () => {
-      const color = await extractDominantColor(product.image_url!);
-      const clothingMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
-
-      if (zone === "top" || zone === "full") {
-        applyMaterialToPart(man.torso, clothingMat);
-        if (man.l_arm) applyMaterialToPart(man.l_arm, clothingMat);
-        if (man.r_arm) applyMaterialToPart(man.r_arm, clothingMat);
-      }
-
-      if (zone === "bottom" || zone === "full") {
-        applyMaterialToPart(man.pelvis, clothingMat);
-        if (man.l_leg) applyMaterialToPart(man.l_leg, clothingMat);
-        if (man.r_leg) applyMaterialToPart(man.r_leg, clothingMat);
-        if (man.l_knee) applyMaterialToPart(man.l_knee, clothingMat);
-        if (man.r_knee) applyMaterialToPart(man.r_knee, clothingMat);
-      }
-
-      if (zone === "shoes") {
-        const shoeMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.05 });
-        if (man.l_ankle) applyMaterialToPart(man.l_ankle, shoeMat);
-        if (man.r_ankle) applyMaterialToPart(man.r_ankle, shoeMat);
-      }
-    })();
-  }, [product, mannequin, baseMaterials]);
-
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.3) * 0.2;
-    }
-  });
-
-  if (!mannequin) return null;
+    applyClothing(man, product);
+  }, [product, ready]);
 
   return (
-    <group ref={groupRef} scale={[1.1, 1.1, 1.1]}>
-      <primitive object={mannequin} />
-    </group>
-  );
-}
-
-// ── Scene ────────────────────────────────────────────────────────────────────
-
-function Scene({ product }: { product?: Product | null }) {
-  return (
-    <>
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[5, 8, 5]} intensity={1.5} castShadow />
-      <directionalLight position={[-3, 4, -2]} intensity={0.4} />
-      <pointLight position={[0, 6, 3]} intensity={0.8} />
-      <hemisphereLight args={["#ffffff", "#444444", 0.6]} />
-
-      <MannequinModel product={product} />
-
-      <ContactShadows position={[0, -0.71, 0]} opacity={0.4} scale={8} blur={2} far={4} />
-
-      <OrbitControls
-        enablePan={false}
-        enableZoom={false}
-        minPolarAngle={Math.PI / 4}
-        maxPolarAngle={Math.PI / 1.8}
-        autoRotate
-        autoRotateSpeed={1}
-      />
-    </>
-  );
-}
-
-// ── Exported component ───────────────────────────────────────────────────────
-
-interface MannequinViewerProps {
-  product?: Product | null;
-}
-
-export function MannequinViewer({ product }: MannequinViewerProps) {
-  return (
-    <div className="mannequin-container h-full w-full">
-      <Canvas
-        camera={{ position: [0, 0.8, 3], fov: 45 }}
-        gl={{ antialias: true, alpha: true }}
-        style={{ background: "transparent" }}
-      >
-        <Suspense fallback={null}>
-          <Scene product={product} />
-        </Suspense>
-      </Canvas>
-    </div>
+    <div
+      ref={containerRef}
+      className="h-full w-full relative overflow-hidden"
+      style={{ minHeight: 300 }}
+    />
   );
 }

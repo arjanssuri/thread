@@ -548,7 +548,7 @@ function OutfitPageInner() {
                 <video
                   ref={videoRef}
                   src={videoUrl}
-                  className="h-full flex-1 object-cover"
+                  className="h-full flex-1 object-contain"
                   controls
                   autoPlay
                   loop
