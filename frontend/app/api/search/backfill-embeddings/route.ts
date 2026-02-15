@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 
 /**
  * POST /api/search/backfill-embeddings
- * Fetches all products from Supabase, generates embeddings (OpenAI) for name+description,
+ * Fetches all products from Supabase, generates embeddings via Elasticsearch inference,
  * and updates each product's embedding column. Run once after seeding products.
- * Requires: OPENAI_API_KEY, SUPABASE_SERVICE_ROLE_KEY.
+ * Requires: ELASTICSEARCH_URL, ELASTICSEARCH_API_KEY, ELASTICSEARCH_INFERENCE_ID.
  */
 export async function POST(): Promise<Response> {
   try {
@@ -43,7 +43,7 @@ export async function POST(): Promise<Response> {
     for (const { id, embedding } of results) {
       const { error: updateError } = await supabase
         .from(SEARCH_CONFIG.productsTable)
-        .update({ [SEARCH_CONFIG.embeddingColumn]: embedding })
+        .update({ embedding })
         .eq("id", id);
       if (updateError) {
         console.error("[backfill-embeddings] Update failed for", id, updateError);

@@ -196,12 +196,34 @@ export async function ensureProductsIndex(): Promise<void> {
   });
 }
 
+// Common color names used to detect color intent in queries
+const COLOR_KEYWORDS = new Set([
+  "red", "blue", "green", "black", "white", "yellow", "orange", "purple",
+  "pink", "brown", "grey", "gray", "navy", "beige", "cream", "tan",
+  "burgundy", "maroon", "olive", "teal", "coral", "gold", "silver",
+  "charcoal", "ivory", "khaki", "lavender", "mint", "nude", "rust",
+  "sage", "salmon", "turquoise", "wine", "indigo", "cyan", "magenta",
+  "mauve", "peach", "plum", "taupe", "camel", "cobalt", "emerald",
+  "forest", "hunter", "lilac", "moss", "mustard", "oatmeal", "rose",
+  "slate", "stone", "terracotta",
+]);
+
+/** Extract color words from a text query */
+function extractColors(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => COLOR_KEYWORDS.has(w));
+}
+
 /**
- * Semantic search: kNN over product embeddings. Returns products with similarity score.
+ * Hybrid semantic search: kNN over embeddings + text match boost for colors.
+ * When the query contains color words, results matching those colors in name/description
+ * get a significant score boost so they rank higher.
  */
 export async function searchProducts(
   queryEmbedding: number[],
-  options: { limit?: number; category?: string | null } = {}
+  options: { limit?: number; category?: string | null; queryText?: string } = {}
 ): Promise<ProductWithScore[]> {
   const client = elasticsearchClient;
   if (!client) throw new Error("Elasticsearch is not configured");
@@ -217,17 +239,43 @@ export async function searchProducts(
     },
   };
 
-  const query =
-    options.category?.trim()
-      ? {
-          bool: {
-            must: [
-              knnClause,
-              { term: { category: options.category.trim() } },
-            ],
-          },
-        }
-      : knnClause;
+  // Detect colors in the original query text
+  const colors = options.queryText ? extractColors(options.queryText) : [];
+
+  // Build should clauses that boost color matches in name and description
+  const colorBoosts =
+    colors.length > 0
+      ? colors.flatMap((color) => [
+          { match: { name: { query: color, boost: 15 } } },
+          { match: { description: { query: color, boost: 10 } } },
+        ])
+      : [];
+
+  let query: Record<string, unknown>;
+
+  if (options.category?.trim() && colorBoosts.length > 0) {
+    query = {
+      bool: {
+        must: [knnClause, { term: { category: options.category.trim() } }],
+        should: colorBoosts,
+      },
+    };
+  } else if (options.category?.trim()) {
+    query = {
+      bool: {
+        must: [knnClause, { term: { category: options.category.trim() } }],
+      },
+    };
+  } else if (colorBoosts.length > 0) {
+    query = {
+      bool: {
+        must: [knnClause],
+        should: colorBoosts,
+      },
+    };
+  } else {
+    query = knnClause;
+  }
 
   const body: Record<string, unknown> = {
     size: limit,
@@ -244,11 +292,14 @@ export async function searchProducts(
     _score?: number;
   }>;
 
+  // Normalize scores to 0-1 range (hybrid boosted scores can exceed 1.0)
+  const maxScore = hits.reduce((m, h) => Math.max(m, h._score ?? 0), 0);
+
   return hits.map((hit) => {
     const s = hit._source;
     if (!s) return null;
-    // Elasticsearch cosine similarity can be in _score; normalize if needed
-    const similarity = typeof hit._score === "number" ? hit._score : undefined;
+    const rawScore = typeof hit._score === "number" ? hit._score : 0;
+    const similarity = maxScore > 0 ? rawScore / maxScore : 0;
     const product: ProductWithScore = {
       id: s.id,
       name: s.name ?? "",

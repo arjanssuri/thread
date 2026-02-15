@@ -1,9 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
-import { getEmbedding } from "@/lib/embeddings";
 import { SEARCH_CONFIG } from "@/lib/search/config";
 import {
-  isElasticsearchConfigured,
-  useElasticsearchInference,
   ensureProductsIndex,
   getProductsIndexCount,
   inferEmbedding,
@@ -13,7 +9,7 @@ import { syncProductsFromSupabase } from "@/lib/search/sync-from-supabase";
 import type { ProductWithScore } from "@/types/product";
 
 /**
- * Run semantic search: embed query, then kNN (Elasticsearch) or match_products (pgvector).
+ * Run semantic search: embed query via Elasticsearch inference, then kNN search.
  * Used by POST /api/search and GET /api/products/graph when query is present.
  */
 export async function runSemanticSearch(
@@ -29,53 +25,22 @@ export async function runSemanticSearch(
       ? options.category.trim()
       : null;
 
-  const embedding = await (useElasticsearchInference()
-    ? inferEmbedding(trimmed)
-    : getEmbedding(trimmed));
+  const embedding = await inferEmbedding(trimmed);
 
   // Fetch more candidates than needed, then apply relevance cutoff
   const fetchLimit = Math.min(limit * 2, 500);
 
-  let results: ProductWithScore[];
-
-  if (isElasticsearchConfigured()) {
-    await ensureProductsIndex();
-    const count = await getProductsIndexCount();
-    if (count === 0) {
-      try {
-        await syncProductsFromSupabase();
-      } catch {
-        // ignore
-      }
+  await ensureProductsIndex();
+  const count = await getProductsIndexCount();
+  if (count === 0) {
+    try {
+      await syncProductsFromSupabase();
+    } catch {
+      // ignore
     }
-    results = await searchProducts(embedding, { limit: fetchLimit, category });
-  } else {
-    const supabase = await createClient();
-    const { data: rows, error } = await supabase.rpc(SEARCH_CONFIG.matchProductsRpc, {
-      query_embedding: embedding,
-      match_limit: fetchLimit,
-      match_threshold: 0,
-      filter_category: category,
-    });
-
-    if (error) throw new Error(error.message);
-
-    results = (Array.isArray(rows) ? rows : []).map((row: Record<string, unknown>) => ({
-      id: String(row.id ?? ""),
-      name: String(row.name ?? ""),
-      description: row.description != null ? String(row.description) : null,
-      image_url: row.image_url != null ? String(row.image_url) : null,
-      price: row.price != null ? Number(row.price) : null,
-      category: row.category != null ? String(row.category) : null,
-      brand: row.brand != null ? String(row.brand) : null,
-      source: String(row.source ?? ""),
-      metadata:
-        row.metadata != null && typeof row.metadata === "object"
-          ? (row.metadata as Record<string, unknown>)
-          : undefined,
-      similarity: typeof row.similarity === "number" ? row.similarity : undefined,
-    }));
   }
+
+  let results = await searchProducts(embedding, { limit: fetchLimit, category, queryText: trimmed });
 
   // Apply relevance cutoff: drop results below 40% of the top score
   if (results.length > 0) {

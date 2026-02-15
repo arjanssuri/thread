@@ -1,7 +1,6 @@
 "use server";
 
-import { getEmbeddings } from "@/lib/embeddings";
-import { SEARCH_CONFIG } from "./config";
+import { inferEmbeddings } from "@/lib/search/elasticsearch";
 
 /**
  * Item your partner's code can pass after fetching from the products table.
@@ -18,12 +17,11 @@ export interface BackfillResultRow {
   embedding: number[];
 }
 
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 50; // ES inference batch limit
 
 /**
- * Compute embeddings for products in batches (OpenAI limit-friendly).
- * Your partner: (1) fetch products from DB, (2) call this with id + text, (3) update products.embedding in DB.
- * Uses SEARCH_CONFIG.embeddingDimension (1536) — must match the products.embedding column.
+ * Compute embeddings for products in batches via Elasticsearch inference.
+ * (1) fetch products from DB, (2) call this with id + text, (3) update products.embedding in DB.
  */
 export async function computeEmbeddingsForBackfill(
   products: ProductRowForBackfill[]
@@ -34,7 +32,7 @@ export async function computeEmbeddingsForBackfill(
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
     const batch = products.slice(i, i + BATCH_SIZE);
     const texts = batch.map((p) => p.text.trim().slice(0, 8191) || p.id);
-    const embeddings = await getEmbeddings(texts);
+    const embeddings = await inferEmbeddings(texts);
     if (embeddings.length !== batch.length) {
       throw new Error(
         `Embedding count mismatch: got ${embeddings.length}, expected ${batch.length}`
