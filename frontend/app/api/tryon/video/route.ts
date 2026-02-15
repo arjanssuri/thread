@@ -132,10 +132,14 @@ export async function POST(request: NextRequest) {
       productEmphasis = `Draw attention to the ${garmentType}: the fit, the neckline, sleeves, and overall drape.`;
     }
 
-    const referenceNotes: string[] = [];
-    if (personImageBase64) referenceNotes.push("The person in the reference image is the model — the video must depict this exact person's face, body, and appearance.");
-    if (productImageBase64) referenceNotes.push("The garment in the reference image is the exact product — match its color, fabric, pattern, and details precisely.");
-    const referenceNote = referenceNotes.length > 0 ? " " + referenceNotes.join(" ") : "";
+    let referenceNote = "";
+    if (personImageBase64 && productImageBase64) {
+      referenceNote = ` TWO reference images are provided. Reference image 1 is a PHOTO OF THE PERSON — use this person's exact face, hair, skin tone, and body as the model in the video. Do NOT use the person shown in reference image 2. Reference image 2 is a PRODUCT PHOTO of the clothing item — use ONLY the garment (its color, fabric, pattern, and design) from this image. IGNORE the model/mannequin wearing it in that photo. The video must show the person from reference image 1 wearing the garment from reference image 2.`;
+    } else if (personImageBase64) {
+      referenceNote = ` A reference image of the person is provided — the video must depict this exact person's face, body, hair, and skin tone.`;
+    } else if (productImageBase64) {
+      referenceNote = ` A reference image of the garment is provided — match its exact color, fabric, pattern, and details. IGNORE the person/mannequin in the product photo.`;
+    }
 
     const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}.${referenceNote} IMPORTANT: The entire person must be visible from head to shoes/feet at all times — never crop any body part.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed wide-angle camera at waist height, centered. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
 
