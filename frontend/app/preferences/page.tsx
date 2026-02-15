@@ -139,27 +139,22 @@ export default function PreferencesPage() {
     if (!file) return;
     setPhotoUploading(true);
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // Send to server for conversion (handles HEIC, WebP, PNG → JPEG via sharp)
+      const formData = new FormData();
+      formData.append("photo", file);
 
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${user.id}/photo.${ext}`;
+      const res = await fetch("/api/preferences/photo", {
+        method: "POST",
+        body: formData,
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from("user-photos")
-        .upload(path, file, { upsert: true });
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("Photo upload error:", data.error);
         return;
       }
 
-      const { data: urlData } = supabase.storage
-        .from("user-photos")
-        .getPublicUrl(path);
-
-      const photoUrl = urlData.publicUrl + `?t=${Date.now()}`;
+      const { photoUrl } = await res.json();
       setPrefs((p) => ({ ...p, photo_url: photoUrl }));
     } catch (err) {
       console.error("Photo upload failed:", err);

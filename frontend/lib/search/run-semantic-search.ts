@@ -33,6 +33,11 @@ export async function runSemanticSearch(
     ? inferEmbedding(trimmed)
     : getEmbedding(trimmed));
 
+  // Fetch more candidates than needed, then apply relevance cutoff
+  const fetchLimit = Math.min(limit * 2, 500);
+
+  let results: ProductWithScore[];
+
   if (isElasticsearchConfigured()) {
     await ensureProductsIndex();
     const count = await getProductsIndexCount();
@@ -43,32 +48,43 @@ export async function runSemanticSearch(
         // ignore
       }
     }
-    return searchProducts(embedding, { limit, category });
+    results = await searchProducts(embedding, { limit: fetchLimit, category });
+  } else {
+    const supabase = await createClient();
+    const { data: rows, error } = await supabase.rpc(SEARCH_CONFIG.matchProductsRpc, {
+      query_embedding: embedding,
+      match_limit: fetchLimit,
+      match_threshold: 0,
+      filter_category: category,
+    });
+
+    if (error) throw new Error(error.message);
+
+    results = (Array.isArray(rows) ? rows : []).map((row: Record<string, unknown>) => ({
+      id: String(row.id ?? ""),
+      name: String(row.name ?? ""),
+      description: row.description != null ? String(row.description) : null,
+      image_url: row.image_url != null ? String(row.image_url) : null,
+      price: row.price != null ? Number(row.price) : null,
+      category: row.category != null ? String(row.category) : null,
+      brand: row.brand != null ? String(row.brand) : null,
+      source: String(row.source ?? ""),
+      metadata:
+        row.metadata != null && typeof row.metadata === "object"
+          ? (row.metadata as Record<string, unknown>)
+          : undefined,
+      similarity: typeof row.similarity === "number" ? row.similarity : undefined,
+    }));
   }
 
-  const supabase = await createClient();
-  const { data: rows, error } = await supabase.rpc(SEARCH_CONFIG.matchProductsRpc, {
-    query_embedding: embedding,
-    match_limit: limit,
-    match_threshold: 0,
-    filter_category: category,
-  });
+  // Apply relevance cutoff: drop results below 40% of the top score
+  if (results.length > 0) {
+    const topScore = results[0].similarity;
+    if (typeof topScore === "number" && topScore > 0) {
+      const threshold = topScore * 0.4;
+      results = results.filter((r) => (r.similarity ?? 0) >= threshold);
+    }
+  }
 
-  if (error) throw new Error(error.message);
-
-  return (Array.isArray(rows) ? rows : []).map((row: Record<string, unknown>) => ({
-    id: String(row.id ?? ""),
-    name: String(row.name ?? ""),
-    description: row.description != null ? String(row.description) : null,
-    image_url: row.image_url != null ? String(row.image_url) : null,
-    price: row.price != null ? Number(row.price) : null,
-    category: row.category != null ? String(row.category) : null,
-    brand: row.brand != null ? String(row.brand) : null,
-    source: String(row.source ?? ""),
-    metadata:
-      row.metadata != null && typeof row.metadata === "object"
-        ? (row.metadata as Record<string, unknown>)
-        : undefined,
-    similarity: typeof row.similarity === "number" ? row.similarity : undefined,
-  }));
+  return results.slice(0, limit);
 }

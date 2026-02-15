@@ -27,7 +27,9 @@ interface AnalysisResult {
     style: string | null;
     fabric: string | null;
     pattern: string | null;
+    fit: string | null;
     details: string | null;
+    features: string[] | null;
   } | null;
   person: Record<string, string | number | null> | null;
 }
@@ -136,6 +138,7 @@ function OutfitPageInner() {
       body: JSON.stringify({
         productImageUrl: selectedProduct.image_url,
         productName: selectedProduct.name,
+        productCategory: selectedProduct.category || null,
         personPhotoUrl: prefs?.photo_url || null,
         personInfo: prefs ? {
           gender: prefs.gender,
@@ -311,6 +314,7 @@ function OutfitPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           productName: p.name,
+          productCategory: p.category || null,
           productAnalysis: analysis?.product ?? null,
           personAnalysis: analysis?.person ?? null,
         }),
@@ -503,11 +507,11 @@ function OutfitPageInner() {
       </div>
 
       {/* ── Bento Grid ── */}
-      <div className="mx-auto max-w-7xl px-6 py-8 md:px-12">
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3 lg:grid-rows-[320px_240px_auto]">
+      <div className="mx-auto max-w-[1400px] px-6 py-8 md:px-12">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:grid-rows-[420px_320px_auto]">
 
           {/* ── Video / Generation — spans 2 cols, 2 rows ── */}
-          <div className="relative rounded-2xl bg-secondary overflow-hidden lg:col-span-2 lg:row-span-2 flex items-center justify-center min-h-[400px] lg:min-h-0">
+          <div className="relative rounded-2xl bg-secondary overflow-hidden lg:col-span-2 lg:row-span-2 flex items-center justify-center min-h-[500px] lg:min-h-0">
             {videoUrl ? (
               <div className="flex h-full w-full">
                 {/* Product card pinned left */}
@@ -655,7 +659,7 @@ function OutfitPageInner() {
           </div>
 
           {/* ── Mannequin with outfit — top right ── */}
-          <div className="relative rounded-2xl bg-secondary overflow-hidden min-h-[320px]">
+          <div className="relative rounded-2xl bg-secondary overflow-hidden min-h-[400px]">
             <MannequinViewer product={selectedProduct} />
 
             {/* Settings overlay */}
@@ -726,6 +730,11 @@ function OutfitPageInner() {
                       {analysis.product.style}
                     </span>
                   )}
+                  {analysis.product.fit && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      {analysis.product.fit}
+                    </span>
+                  )}
                   {analysis.product.pattern && analysis.product.pattern !== "solid" && (
                     <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
                       {analysis.product.pattern}
@@ -736,6 +745,11 @@ function OutfitPageInner() {
                       {analysis.product.details}
                     </span>
                   )}
+                  {analysis.product.features?.map((f, i) => (
+                    <span key={i} className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-1 text-xs text-primary">
+                      {f}
+                    </span>
+                  ))}
                 </div>
               </div>
             ) : (

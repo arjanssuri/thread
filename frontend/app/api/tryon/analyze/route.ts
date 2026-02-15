@@ -15,11 +15,47 @@ async function extractDominantColor(imageUrl: string): Promise<string> {
   try {
     const res = await fetch(imageUrl);
     if (!res.ok) return "#444444";
-    const buffer = Buffer.from(await res.arrayBuffer());
-    const { dominant } = await sharp(buffer).resize(64, 64, { fit: "cover" }).stats();
-    const r = Math.round(dominant.r);
-    const g = Math.round(dominant.g);
-    const b = Math.round(dominant.b);
+    const inputBuffer = Buffer.from(await res.arrayBuffer());
+
+    // Get image dimensions to center-crop (inner 50%) — avoids picking up background
+    const metadata = await sharp(inputBuffer).metadata();
+    const w = metadata.width ?? 200;
+    const h = metadata.height ?? 200;
+    const cropW = Math.round(w * 0.5);
+    const cropH = Math.round(h * 0.5);
+    const left = Math.round((w - cropW) / 2);
+    const top = Math.round((h - cropH) / 2);
+
+    // Center-crop, resize to small grid, extract raw pixel data
+    const { data: pixels } = await sharp(inputBuffer)
+      .extract({ left, top, width: cropW, height: cropH })
+      .resize(16, 16, { fit: "cover" })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    // Sample all pixels and filter out near-white/near-black (likely background)
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (let i = 0; i < pixels.length; i += 3) {
+      const pr = pixels[i], pg = pixels[i + 1], pb = pixels[i + 2];
+      const brightness = (pr + pg + pb) / 3;
+      // Skip near-white (background) and near-black pixels
+      if (brightness > 230 || brightness < 20) continue;
+      rSum += pr; gSum += pg; bSum += pb; count++;
+    }
+
+    // If most pixels were filtered out (e.g. white product on white bg), fall back to all pixels
+    if (count < 20) {
+      rSum = 0; gSum = 0; bSum = 0; count = 0;
+      for (let i = 0; i < pixels.length; i += 3) {
+        rSum += pixels[i]; gSum += pixels[i + 1]; bSum += pixels[i + 2]; count++;
+      }
+    }
+
+    if (count === 0) return "#444444";
+    const r = Math.round(rSum / count);
+    const g = Math.round(gSum / count);
+    const b = Math.round(bSum / count);
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
   } catch (err) {
     console.error("[analyze] Color extraction failed:", err);
@@ -70,7 +106,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 501 });
   }
 
-  const { productImageUrl, productName, personPhotoUrl, personInfo } = await request.json();
+  const { productImageUrl, productName, productCategory, personPhotoUrl, personInfo } = await request.json();
 
   if (!productImageUrl) {
     return NextResponse.json({ error: "productImageUrl is required" }, { status: 400 });
@@ -93,12 +129,20 @@ export async function POST(request: NextRequest) {
               role: "user",
               parts: [
                 {
-                  text: `Analyze this clothing product image. Return JSON with these exact keys:
-- "garment_type": what type of clothing (e.g. "slim-fit jeans", "oversized hoodie", "midi dress")
+                  text: `Analyze this clothing product image.${productName ? ` The product is "${productName}"${productCategory ? ` in the "${productCategory}" category` : ""}.` : ""} Focus your analysis specifically on this product type — describe features that are distinctive to this kind of garment.
+
+For example: if it's pants/jeans, emphasize fit (slim, relaxed, wide-leg), rise (low, mid, high), leg opening, wash/finish, and pant-specific details like distressing or stitching. If it's a top, focus on neckline, sleeve style, hem length, and top-specific details. Always tailor your descriptions to what matters most for this specific garment type.
+
+Return JSON with these exact keys:
+- "garment_type": specific type (e.g. "high-rise slim-fit jeans", "cropped oversized hoodie", "A-line midi dress")
 - "style": the style/vibe (e.g. "streetwear", "formal", "casual", "athleisure")
-- "fabric": the apparent fabric/material (e.g. "denim", "cotton", "silk", "leather")
+- "fabric": the apparent fabric/material (e.g. "stretch denim", "ribbed cotton", "silk charmeuse")
 - "pattern": pattern if any (e.g. "solid", "striped", "plaid", "floral")
-- "details": notable design details (e.g. "distressed knees, silver buttons", "pleated front")`,
+- "fit": how the garment fits (e.g. "slim through thigh, tapered leg" for pants, "relaxed oversized" for tops)
+- "details": a SHORT comma-separated list of notable design details, max 10 words total (e.g. "distressed knees, raw hem, contrast stitching" NOT a full paragraph)
+- "features": an array of 3-6 short feature tags, each 1-4 words, capturing the most distinctive micro-details a shopper would notice (e.g. ["raw hem", "mid-rise", "stretch denim", "whisker fading", "tapered leg", "brass rivets"] for jeans, or ["mock neck", "ribbed cuffs", "relaxed fit", "drop shoulder"] for a sweater)
+
+IMPORTANT: Keep ALL values concise. No value should be longer than 15 words. "details" should be a short comma-separated list, NOT a paragraph or full sentence.`,
                 },
                 { fileData: { mimeType: "image/jpeg", fileUri: productImageUrl } },
               ],
@@ -152,7 +196,9 @@ export async function POST(request: NextRequest) {
       style: productAiResult?.style ?? null,
       fabric: productAiResult?.fabric ?? null,
       pattern: productAiResult?.pattern ?? null,
+      fit: productAiResult?.fit ?? null,
       details: productAiResult?.details ?? null,
+      features: Array.isArray(productAiResult?.features) ? productAiResult.features : null,
     };
 
     // Build person analysis

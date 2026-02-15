@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { productName, productAnalysis, personAnalysis } = await request.json();
+  const { productName, productCategory, productAnalysis, personAnalysis } = await request.json();
 
   if (!productName) {
     return NextResponse.json(
@@ -48,6 +48,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+    // Determine the product zone for camera direction
+    const garmentType = (productAnalysis?.garment_type ?? productName).toLowerCase();
+    const category = (productCategory ?? "").toLowerCase();
+    const isBottoms = /pant|jean|trouser|short|skirt|legging|jogger|chino|cargo/i.test(garmentType + " " + category);
+    const isFootwear = /shoe|sneaker|boot|sandal|heel|loafer|slipper/i.test(garmentType + " " + category);
+    const isFullBody = /dress|jumpsuit|romper|suit|onesie|overalls/i.test(garmentType + " " + category);
 
     // Build person description from pre-computed analysis
     let personDesc = "a fashion model";
@@ -72,23 +79,36 @@ export async function POST(request: NextRequest) {
       personDesc = parts.length > 0 ? `a ${parts.join(", ")} person` : "a fashion model";
     }
 
-    // Build garment description from pre-computed analysis
+    // Build garment description — emphasize the product-specific features
     let garmentDesc = productName;
     if (productAnalysis) {
       garmentDesc = `${productAnalysis.color ?? ""} ${productAnalysis.garment_type ?? productName}`.trim();
       if (productAnalysis.fabric) garmentDesc += ` made of ${productAnalysis.fabric}`;
+      if (productAnalysis.fit) garmentDesc += `, ${productAnalysis.fit}`;
       if (productAnalysis.pattern && productAnalysis.pattern !== "solid") garmentDesc += `, ${productAnalysis.pattern} pattern`;
       if (productAnalysis.details) garmentDesc += ` with ${productAnalysis.details}`;
     }
 
     const styleNote = productAnalysis?.style ? ` The overall aesthetic is ${productAnalysis.style}.` : "";
 
-    const prompt = `${personDesc} wearing ${garmentDesc}.${styleNote} Clean studio backdrop, soft professional lighting, the model slowly turns to show the garment from all angles. Cinematic, high quality fashion video.`;
+    // Product-specific emphasis (what to draw attention to) while keeping consistent framing
+    let productEmphasis: string;
+    if (isBottoms) {
+      productEmphasis = `Draw attention to the ${garmentType}: the waistband, the fit through the thigh, the leg silhouette, and the hem.`;
+    } else if (isFootwear) {
+      productEmphasis = `Draw attention to the footwear: the shape, material, and how they complete the outfit.`;
+    } else if (isFullBody) {
+      productEmphasis = `Draw attention to how the garment drapes and flows, the waistline, neckline, and hemline.`;
+    } else {
+      productEmphasis = `Draw attention to the ${garmentType}: the fit, the neckline, sleeves, and overall drape.`;
+    }
+
+    const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}. IMPORTANT: The entire person must be visible from head to shoes/feet at all times — never crop any body part.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed wide-angle camera at waist height, centered. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
 
     console.log("[Veo] Generated prompt:", prompt);
 
     const operation = await ai.models.generateVideos({
-      model: "veo-3.1-fast-generate",
+      model: "veo-3.1-fast-generate-preview",
       prompt,
       config: {
         aspectRatio: "9:16",

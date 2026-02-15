@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, ContactShadows } from "@react-three/drei";
 import { useRef, useEffect, useState, Suspense, useMemo } from "react";
 import * as THREE from "three";
@@ -8,7 +8,6 @@ import type { Product } from "@/types/product";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Classify product category into body zone */
 function classifyZone(
   category: string | null | undefined
 ): "top" | "bottom" | "shoes" | "full" | "none" {
@@ -20,14 +19,13 @@ function classifyZone(
   return "none";
 }
 
-/** Load an image URL and extract dominant color via a small canvas sample */
 function extractDominantColor(url: string): Promise<string> {
   return new Promise((resolve) => {
-    const img = new Image();
+    const img = document.createElement("img");
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const size = 32; // sample at small size for speed
+      const size = 32;
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext("2d")!;
@@ -36,47 +34,19 @@ function extractDominantColor(url: string): Promise<string> {
 
       let r = 0, g = 0, b = 0, count = 0;
       for (let i = 0; i < data.length; i += 4) {
-        // Skip very light (background) and very dark pixels
         const brightness = data[i] + data[i + 1] + data[i + 2];
         if (brightness > 60 && brightness < 700) {
-          r += data[i];
-          g += data[i + 1];
-          b += data[i + 2];
-          count++;
+          r += data[i]; g += data[i + 1]; b += data[i + 2]; count++;
         }
       }
-
-      if (count === 0) {
-        resolve("#444444");
-        return;
-      }
-
-      r = Math.round(r / count);
-      g = Math.round(g / count);
-      b = Math.round(b / count);
+      if (count === 0) { resolve("#444444"); return; }
+      r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
       resolve(`#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`);
     };
     img.onerror = () => resolve("#444444");
     img.src = url;
   });
 }
-
-/** Load product image as a Three.js texture */
-function loadTexture(url: string): Promise<THREE.Texture> {
-  return new Promise((resolve, reject) => {
-    new THREE.TextureLoader().load(
-      url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        resolve(tex);
-      },
-      undefined,
-      reject
-    );
-  });
-}
-
-// ── Body part traversal ──────────────────────────────────────────────────────
 
 function applyMaterialToPart(part: THREE.Object3D, material: THREE.Material) {
   part.traverse((child) => {
@@ -86,7 +56,7 @@ function applyMaterialToPart(part: THREE.Object3D, material: THREE.Material) {
   });
 }
 
-// ── MannequinModel ───────────────────────────────────────────────────────────
+// ── MannequinModel (mannequin-js) ────────────────────────────────────────────
 
 interface MannequinModelProps {
   product?: Product | null;
@@ -98,14 +68,12 @@ function MannequinModel({ product }: MannequinModelProps) {
   const mannequinRef = useRef<any>(null);
   const [mannequin, setMannequin] = useState<THREE.Object3D | null>(null);
 
-  // Base materials (cached)
   const baseMaterials = useMemo(
     () => ({
       skin: new THREE.MeshStandardMaterial({ color: "#d4a574", roughness: 0.6, metalness: 0.05 }),
       shirt: new THREE.MeshStandardMaterial({ color: "#1a1a1a", roughness: 0.7, metalness: 0 }),
       pants: new THREE.MeshStandardMaterial({ color: "#2d2d3d", roughness: 0.7, metalness: 0 }),
       shoes: new THREE.MeshStandardMaterial({ color: "#111111", roughness: 0.6, metalness: 0.05 }),
-      joints: new THREE.MeshStandardMaterial({ color: "#444444", roughness: 0.7, metalness: 0 }),
     }),
     []
   );
@@ -114,139 +82,103 @@ function MannequinModel({ product }: MannequinModelProps) {
   useEffect(() => {
     let cancelled = false;
 
-    import("mannequin-js/src/mannequin.js").then((mod) => {
-      if (cancelled) return;
-      const { Male, getStage } = mod;
-      const man = new Male();
+    // mannequin-js auto-creates a renderer/scene/dom element on import.
+    // We need to capture and clean those up after extracting the model.
+    import("mannequin-js/src/mannequin.js")
+      .then((mod) => {
+        if (cancelled) return;
+        const { Male, getStage } = mod;
+        const man = new Male();
 
-      man.recolor("#d4a574", "#111111", "#2d2d3d", "#444444", "#d4a574", "#1a1a1a", "#c4956a");
+        // Natural pose
+        man.torso.bend = 2;
+        man.head.nod = -5;
+        man.l_arm.raise = -5;
+        man.r_arm.raise = -5;
+        man.l_arm.straddle = 8;
+        man.r_arm.straddle = 8;
+        man.l_elbow.bend = 15;
+        man.r_elbow.bend = 15;
 
-      // Smooth head
-      man.head.traverse((child: THREE.Object3D) => {
-        if (child instanceof THREE.Mesh && child.name === "HeadShape") {
-          child.material = baseMaterials.skin;
+        // Detach from mannequin-js's internal scene
+        man.removeFromParent();
 
-          // Hair
-          const bbox = new THREE.Box3().setFromObject(child);
-          const headSize = new THREE.Vector3();
-          bbox.getSize(headSize);
-          const headCenter = new THREE.Vector3();
-          bbox.getCenter(headCenter);
-
-          const hairMat = new THREE.MeshStandardMaterial({ color: "#1a1209", roughness: 0.9, metalness: 0 });
-          const hairGeo = new THREE.SphereGeometry(headSize.x * 0.55, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55);
-          const pos = hairGeo.attributes.position;
-          for (let i = 0; i < pos.count; i++) {
-            const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-            const noise = 1 + Math.sin(x * 20) * Math.cos(z * 20) * 0.03;
-            pos.setXYZ(i, x * noise, y * noise, z * noise);
+        // Clean up mannequin-js's auto-created renderer + DOM elements
+        try {
+          const stage = getStage();
+          if (stage?.renderer) {
+            stage.renderer.setAnimationLoop(null);
+            if (stage.renderer.domElement?.parentNode) {
+              stage.renderer.domElement.parentNode.removeChild(stage.renderer.domElement);
+            }
+            stage.renderer.dispose();
           }
-          hairGeo.computeVertexNormals();
-
-          const hairMesh = new THREE.Mesh(hairGeo, hairMat);
-          child.getWorldPosition(headCenter);
-          child.parent?.worldToLocal(headCenter);
-          hairMesh.position.copy(headCenter);
-          hairMesh.position.y += headSize.y * 0.07;
-
-          const sideGeo = new THREE.SphereGeometry(headSize.x * 0.56, 24, 12, Math.PI * 0.6, Math.PI * 1.5, Math.PI * 0.25, Math.PI * 0.45);
-          const sideMesh = new THREE.Mesh(sideGeo, hairMat);
-          sideMesh.position.copy(hairMesh.position);
-          sideMesh.position.y -= headSize.y * 0.05;
-
-          if (child.parent) {
-            child.parent.add(hairMesh);
-            child.parent.add(sideMesh);
-          }
+        } catch {
+          // ignore cleanup errors
         }
+
+        // Remove any stray elements mannequin-js appended
+        document.querySelectorAll('canvas').forEach((c) => {
+          if (c.style.position === 'fixed' && !c.closest('.mannequin-container')) {
+            c.remove();
+          }
+        });
+
+        mannequinRef.current = man;
+        setMannequin(man);
+      })
+      .catch((err) => {
+        console.error("[MannequinViewer] Failed to load mannequin-js:", err);
       });
 
-      // Natural pose
-      man.torso.bend = 2;
-      man.head.nod = -5;
-      man.l_arm.raise = -5;
-      man.r_arm.raise = -5;
-      man.l_arm.straddle = 8;
-      man.r_arm.straddle = 8;
-      man.l_elbow.bend = 15;
-      man.r_elbow.bend = 15;
-
-      man.removeFromParent();
-
-      const stage = getStage();
-      if (stage?.renderer) {
-        stage.renderer.setAnimationLoop(null);
-        stage.renderer.dispose();
-        if (stage.renderer.domElement?.parentNode) stage.renderer.domElement.remove();
-      }
-
-      mannequinRef.current = man;
-      setMannequin(man);
-    });
-
     return () => { cancelled = true; };
-  }, [baseMaterials]);
+  }, []);
 
-  // Apply product clothing to mannequin
+  // Apply product clothing colors
   useEffect(() => {
     const man = mannequinRef.current;
     if (!man) return;
 
-    // Reset to defaults first
+    // Reset to defaults
     applyMaterialToPart(man.torso, baseMaterials.shirt);
+    if (man.l_arm) applyMaterialToPart(man.l_arm, baseMaterials.shirt);
+    if (man.r_arm) applyMaterialToPart(man.r_arm, baseMaterials.shirt);
     applyMaterialToPart(man.pelvis, baseMaterials.pants);
-    applyMaterialToPart(man.l_leg, baseMaterials.pants);
-    applyMaterialToPart(man.r_leg, baseMaterials.pants);
-    applyMaterialToPart(man.l_ankle, baseMaterials.shoes);
-    applyMaterialToPart(man.r_ankle, baseMaterials.shoes);
+    if (man.l_leg) applyMaterialToPart(man.l_leg, baseMaterials.pants);
+    if (man.r_leg) applyMaterialToPart(man.r_leg, baseMaterials.pants);
+    if (man.l_ankle) applyMaterialToPart(man.l_ankle, baseMaterials.shoes);
+    if (man.r_ankle) applyMaterialToPart(man.r_ankle, baseMaterials.shoes);
 
     if (!product?.image_url || !product.category) return;
 
     const zone = classifyZone(product.category);
     if (zone === "none") return;
 
-    // Extract color and optionally load texture
     (async () => {
       const color = await extractDominantColor(product.image_url!);
-      let texture: THREE.Texture | null = null;
-      try {
-        texture = await loadTexture(product.image_url!);
-      } catch { /* fall back to color only */ }
+      const clothingMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
 
-      const clothingMat = new THREE.MeshStandardMaterial({
-        color,
-        map: texture,
-        roughness: 0.75,
-        metalness: 0,
-      });
-
-      // Apply to the right body parts
       if (zone === "top" || zone === "full") {
         applyMaterialToPart(man.torso, clothingMat);
-        // Slightly tint the upper arms to match
-        const sleeveMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
-        applyMaterialToPart(man.l_arm, sleeveMat);
-        applyMaterialToPart(man.r_arm, sleeveMat);
+        if (man.l_arm) applyMaterialToPart(man.l_arm, clothingMat);
+        if (man.r_arm) applyMaterialToPart(man.r_arm, clothingMat);
       }
 
       if (zone === "bottom" || zone === "full") {
-        const bottomMat = texture
-          ? new THREE.MeshStandardMaterial({ color, map: texture, roughness: 0.75, metalness: 0 })
-          : new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0 });
-        applyMaterialToPart(man.pelvis, bottomMat);
-        applyMaterialToPart(man.l_leg, bottomMat);
-        applyMaterialToPart(man.r_leg, bottomMat);
-        applyMaterialToPart(man.l_knee, bottomMat);
-        applyMaterialToPart(man.r_knee, bottomMat);
+        applyMaterialToPart(man.pelvis, clothingMat);
+        if (man.l_leg) applyMaterialToPart(man.l_leg, clothingMat);
+        if (man.r_leg) applyMaterialToPart(man.r_leg, clothingMat);
+        if (man.l_knee) applyMaterialToPart(man.l_knee, clothingMat);
+        if (man.r_knee) applyMaterialToPart(man.r_knee, clothingMat);
       }
 
       if (zone === "shoes") {
         const shoeMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.05 });
-        applyMaterialToPart(man.l_ankle, shoeMat);
-        applyMaterialToPart(man.r_ankle, shoeMat);
+        if (man.l_ankle) applyMaterialToPart(man.l_ankle, shoeMat);
+        if (man.r_ankle) applyMaterialToPart(man.r_ankle, shoeMat);
       }
     })();
-  }, [product, baseMaterials]);
+  }, [product, mannequin, baseMaterials]);
 
   useFrame((state) => {
     if (groupRef.current) {
@@ -298,7 +230,7 @@ interface MannequinViewerProps {
 
 export function MannequinViewer({ product }: MannequinViewerProps) {
   return (
-    <div className="h-full w-full">
+    <div className="mannequin-container h-full w-full">
       <Canvas
         camera={{ position: [0, 0.8, 3], fov: 45 }}
         gl={{ antialias: true, alpha: true }}
