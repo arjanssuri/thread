@@ -269,6 +269,13 @@ function OutfitPageInner() {
         body: JSON.stringify({
           productImageUrl: p.image_url,
           productName: p.name,
+          personPhotoUrl: prefs?.photo_url || null,
+          personInfo: prefs ? {
+            gender: prefs.gender,
+            height_cm: prefs.height_cm,
+            weight_kg: prefs.weight_kg,
+            fit_preference: prefs.fit_preference,
+          } : null,
         }),
       });
 

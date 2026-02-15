@@ -24,9 +24,57 @@ async function uploadToStorage(videoBuffer: Buffer): Promise<string | null> {
   }
 }
 
+interface ProductAnalysis {
+  color: string;
+  garment_type: string;
+  style: string;
+  fabric: string;
+  details: string;
+}
+
+interface PersonAnalysis {
+  ethnicity: string;
+  build: string;
+  hair: string;
+  age_range: string;
+  skin_tone: string;
+}
+
+/** Use Gemini to analyze an image and return structured JSON. */
+async function analyzeImage(
+  ai: GoogleGenAI,
+  imageUrl: string,
+  systemPrompt: string
+): Promise<Record<string, string> | null> {
+  try {
+    const res = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: systemPrompt },
+            {
+              fileData: { mimeType: "image/jpeg", fileUri: imageUrl },
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+    const text = res.text ?? "";
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("Image analysis failed:", err);
+    return null;
+  }
+}
+
 /**
- * POST — Start video generation, returns operation name for polling.
- * GET  — Poll status by operation name via REST (avoids SDK _fromAPIResponse bug).
+ * POST — Analyze product & person images, then start Veo video generation.
+ * GET  — Poll status by operation name.
  */
 
 export async function POST(request: NextRequest) {
@@ -37,7 +85,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { productImageUrl, productName } = await request.json();
+  const { productImageUrl, productName, personPhotoUrl, personInfo } = await request.json();
 
   if (!productImageUrl) {
     return NextResponse.json(
@@ -49,10 +97,65 @@ export async function POST(request: NextRequest) {
   try {
     const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-    const prompt = `A fashion model wearing ${productName}. Clean studio backdrop, soft professional lighting, the model slowly turns to show the garment from all angles. Cinematic, high quality fashion video.`;
+    // Analyze product image for color, style, fabric
+    const productAnalysis = await analyzeImage(
+      ai,
+      productImageUrl,
+      `Analyze this clothing product image. Return JSON with these exact keys:
+- "color": the primary color(s) of the garment (e.g. "navy blue", "black with white stripes")
+- "garment_type": what type of clothing (e.g. "slim-fit jeans", "oversized hoodie", "midi dress")
+- "style": the style/vibe (e.g. "streetwear", "formal", "casual", "athleisure")
+- "fabric": the apparent fabric/material (e.g. "denim", "cotton", "silk", "leather")
+- "details": notable design details (e.g. "distressed knees, silver buttons", "pleated front")`
+    );
+
+    // Analyze person photo if available
+    let personAnalysis: Record<string, string> | null = null;
+    if (personPhotoUrl) {
+      personAnalysis = await analyzeImage(
+        ai,
+        personPhotoUrl,
+        `Analyze this person's appearance for a fashion try-on video. Return JSON with these exact keys:
+- "ethnicity": apparent ethnicity/background
+- "build": body build (e.g. "slim", "athletic", "average", "curvy")
+- "hair": hair description (color, length, style)
+- "age_range": approximate age range (e.g. "early 20s", "mid 30s")
+- "skin_tone": skin tone description (e.g. "fair", "olive", "medium brown", "deep")`
+      );
+    }
+
+    // Build rich prompt
+    const product = productAnalysis as ProductAnalysis | null;
+    const person = personAnalysis as PersonAnalysis | null;
+
+    let personDesc = "a fashion model";
+    if (person) {
+      personDesc = `a ${person.age_range ?? ""} ${person.ethnicity ?? ""} person with a ${person.build ?? "average"} build, ${person.hair ?? ""} hair, and ${person.skin_tone ?? "medium"} skin tone`.replace(/\s+/g, " ").trim();
+    } else if (personInfo) {
+      // Fall back to user preferences if no photo
+      const parts = [];
+      if (personInfo.gender) parts.push(personInfo.gender);
+      if (personInfo.height_cm) parts.push(`${personInfo.height_cm}cm tall`);
+      if (personInfo.weight_kg) parts.push(`${personInfo.weight_kg}kg`);
+      if (personInfo.fit_preference) parts.push(`${personInfo.fit_preference} fit preference`);
+      personDesc = parts.length > 0 ? `a ${parts.join(", ")} person` : "a fashion model";
+    }
+
+    let garmentDesc = productName;
+    if (product) {
+      garmentDesc = `${product.color ?? ""} ${product.garment_type ?? productName}`.trim();
+      if (product.fabric) garmentDesc += ` made of ${product.fabric}`;
+      if (product.details) garmentDesc += ` with ${product.details}`;
+    }
+
+    const styleNote = product?.style ? ` The overall aesthetic is ${product.style}.` : "";
+
+    const prompt = `${personDesc} wearing ${garmentDesc}.${styleNote} Clean studio backdrop, soft professional lighting, the model slowly turns to show the garment from all angles. Cinematic, high quality fashion video.`;
+
+    console.log("[Veo] Generated prompt:", prompt);
 
     const operation = await ai.models.generateVideos({
-      model: "veo-3.1-generate-preview",
+      model: "veo-3.1-fast-generate",
       prompt,
       config: {
         aspectRatio: "9:16",
@@ -61,6 +164,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       operationName: operation.name,
+      prompt,
+      productAnalysis: product,
+      personAnalysis: person,
     });
   } catch (err: unknown) {
     const message =
