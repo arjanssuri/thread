@@ -11,13 +11,26 @@ import type { Product } from "@/types/product";
 import type { UserPreferences } from "@/types/preferences";
 import type { TryOnHistoryGrouped } from "@/types/tryon-history";
 
-const PreferenceMannequin = dynamic(
+const MannequinViewer = dynamic(
   () =>
-    import("@/components/preference-mannequin").then(
-      (m) => m.PreferenceMannequin
+    import("@/components/mannequin-viewer").then(
+      (m) => m.MannequinViewer
     ),
   { ssr: false }
 );
+
+interface AnalysisResult {
+  product: {
+    color: string;
+    color_hex: string;
+    garment_type: string;
+    style: string | null;
+    fabric: string | null;
+    pattern: string | null;
+    details: string | null;
+  } | null;
+  person: Record<string, string | number | null> | null;
+}
 
 const STORAGE_KEY = "thread_tryon_job";
 
@@ -54,6 +67,9 @@ function OutfitPageInner() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
   const historyRef = useRef<HTMLDivElement>(null);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const lastAnalyzedId = useRef<string | null>(null);
 
   const TRYON_PRODUCT_KEY = "thread_tryon_product";
 
@@ -107,6 +123,33 @@ function OutfitPageInner() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [historyOpen]);
+
+  // Analyze product when selected (runs once per product)
+  useEffect(() => {
+    if (!selectedProduct?.image_url || selectedProduct.id === lastAnalyzedId.current) return;
+    lastAnalyzedId.current = selectedProduct.id;
+    setAnalyzing(true);
+    setAnalysis(null);
+    fetch("/api/tryon/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productImageUrl: selectedProduct.image_url,
+        productName: selectedProduct.name,
+        personPhotoUrl: prefs?.photo_url || null,
+        personInfo: prefs ? {
+          gender: prefs.gender,
+          height_cm: prefs.height_cm,
+          weight_kg: prefs.weight_kg,
+          fit_preference: prefs.fit_preference,
+        } : null,
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setAnalysis(data); })
+      .catch(() => {})
+      .finally(() => setAnalyzing(false));
+  }, [selectedProduct, prefs]);
 
   // Fetch products for selection
   useEffect(() => {
@@ -267,15 +310,9 @@ function OutfitPageInner() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          productImageUrl: p.image_url,
           productName: p.name,
-          personPhotoUrl: prefs?.photo_url || null,
-          personInfo: prefs ? {
-            gender: prefs.gender,
-            height_cm: prefs.height_cm,
-            weight_kg: prefs.weight_kg,
-            fit_preference: prefs.fit_preference,
-          } : null,
+          productAnalysis: analysis?.product ?? null,
+          personAnalysis: analysis?.person ?? null,
         }),
       });
 
@@ -300,7 +337,7 @@ function OutfitPageInner() {
       setGenerating(false);
       setPollMsg(null);
     }
-  }, [selectedProduct, startPolling]);
+  }, [selectedProduct, startPolling, analysis]);
 
   // Auto-generate: fires once when product is ready and pendingGenerate is set
   useEffect(() => {
@@ -617,14 +654,9 @@ function OutfitPageInner() {
             )}
           </div>
 
-          {/* ── Mannequin — top right ── */}
+          {/* ── Mannequin with outfit — top right ── */}
           <div className="relative rounded-2xl bg-secondary overflow-hidden min-h-[320px]">
-            <PreferenceMannequin
-              heightCm={heightCm}
-              weightKg={weightKg}
-              gender={gender}
-              fitPreference={fitPref}
-            />
+            <MannequinViewer product={selectedProduct} />
 
             {/* Settings overlay */}
             <div className="absolute top-3 left-3 flex flex-col gap-1">
@@ -657,31 +689,80 @@ function OutfitPageInner() {
             )}
           </div>
 
-          {/* ── Body info card — bottom right ── */}
+          {/* ── AI Tags — bottom right ── */}
           <div className="rounded-2xl bg-secondary p-5 flex flex-col justify-between">
-            <div>
-              <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-                Body Model
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2">
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{heightCm}</p>
-                  <p className="text-[11px] text-muted-foreground">cm tall</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">{weightKg}</p>
-                  <p className="text-[11px] text-muted-foreground">kg</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground capitalize">{gender}</p>
-                  <p className="text-[11px] text-muted-foreground">gender</p>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground capitalize">{fitPref}</p>
-                  <p className="text-[11px] text-muted-foreground">fit</p>
+            {analyzing ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-xs">Analyzing product...</span>
+              </div>
+            ) : analysis?.product ? (
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  AI Analysis
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {analysis.product.color && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0 border border-border"
+                        style={{ backgroundColor: analysis.product.color_hex }}
+                      />
+                      {analysis.product.color}
+                    </span>
+                  )}
+                  {analysis.product.garment_type && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      {analysis.product.garment_type}
+                    </span>
+                  )}
+                  {analysis.product.fabric && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      {analysis.product.fabric}
+                    </span>
+                  )}
+                  {analysis.product.style && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      {analysis.product.style}
+                    </span>
+                  )}
+                  {analysis.product.pattern && analysis.product.pattern !== "solid" && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-foreground">
+                      {analysis.product.pattern}
+                    </span>
+                  )}
+                  {analysis.product.details && (
+                    <span className="rounded-full bg-background border border-border px-2.5 py-1 text-xs text-muted-foreground">
+                      {analysis.product.details}
+                    </span>
+                  )}
                 </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  Body Model
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2">
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{heightCm}</p>
+                    <p className="text-[11px] text-muted-foreground">cm tall</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">{weightKg}</p>
+                    <p className="text-[11px] text-muted-foreground">kg</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground capitalize">{gender}</p>
+                    <p className="text-[11px] text-muted-foreground">gender</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground capitalize">{fitPref}</p>
+                    <p className="text-[11px] text-muted-foreground">fit</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <Link
               href="/preferences"
               className="mt-4 flex items-center justify-center gap-1.5 rounded-full border border-border py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors"
