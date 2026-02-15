@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       referenceNote = ` The reference image shows the garment — match its exact color, fabric, pattern, and details. Ignore the person/mannequin in the photo.`;
     }
 
-    const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}.${referenceNote} CRITICAL FRAMING: Show the FULL BODY from head to feet at all times — wide shot, never crop or zoom in. Do NOT match the framing of the input image.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed wide-angle camera at waist height, centered, far enough back to show the entire body. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
+    const prompt = `Full-body fashion video of ${personDesc} wearing ${garmentDesc}.${referenceNote} CRITICAL FRAMING: The person's face and head must be FULLY visible at all times with space above the head. Show the entire body from the top of the head to the feet — never cut off the face or head. Do NOT match the framing of the input image.${styleNote} Clean white studio backdrop, soft even professional lighting. Fixed camera centered on the person with enough room to show head to toe with padding above and below. The model stands facing camera, then does a slow 360-degree turn in place. ${productEmphasis} Cinematic, high quality, 4K fashion video.`;
 
     console.log("[Veo] Generated prompt:", prompt);
     console.log("[Veo] Person image:", hasPersonImage, "Product image:", hasProductImage);
